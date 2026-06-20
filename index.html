@@ -1,0 +1,1862 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Go To Hell</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="jquery-1.9.1.min.js" type="text/javascript"></script>
+    <script src="jquery.multitouch.js" type="text/javascript"></script>
+    <link href="jquery.multitouch.css" rel="stylesheet" type="text/css">
+    <link rel="icon" type="image/png" href="fire/fire5.png">
+    
+    <script src="characters_info.js" type="text/javascript"></script>
+
+    <style>
+        html, body {
+            margin: 0; padding: 0; 
+            width: 100%; 
+            height: 100dvh; 
+            overflow: hidden; 
+            background: #000; 
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #canvas {
+            width: 100vw;
+            height: 100dvh;
+            display: block; 
+            image-rendering: pixelated;
+            object-fit: contain;
+            background: #1a1a1a;
+        }
+
+        #preloader { position: absolute; visibility: hidden; width: 0; height: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="preloader">
+        <img id="GO_SMALL" src="go_small.png" style="display:none;" />
+        <img id="TO_SMALL" src="to_small.png" style="display:none;" />
+        <img id="HELL_SMALL" src="hell_small.png" style="display:none;" />
+        
+        <img id="GO" src="GO.png" style="display:none;" />
+        <img id="TO" src="TO.png" style="display:none;" />
+        <img id="HELL" src="HELL.png" style="display:none;" />
+        
+        <img id="bg_img" src="background.png">  
+        <img id="cloud_img" src="cloud.png">  
+        <img id="heavenly_clouds" src="heavenlyclouds.png">  
+        <img id="heavenly_rays" src="heavenlyrays.png"> 
+        <img id="black_atmosphere" src="blackatmosphere.png">
+        <img id="white_atmosphere" src="whiteatmosphere.png">
+        
+        <img id="old_paper_below" src="old_paper_below.png">
+        <img id="old_paper_upper" src="old_paper_upper.png">
+        <img id="old_paper_ui" src="old_paper_ui.png">
+
+        <img id="lava_1" src="lava1.png">
+        <img id="lava_2" src="lava2.png">
+        <img id="lava_3" src="lava3.png">
+        <img id="lava_4" src="lava4.png">
+        <img id="lava_5" src="lava5.png">
+
+        <img id="fire_1" src="fire/fire1.png">
+        <img id="fire_2" src="fire/fire2.png">
+        <img id="fire_3" src="fire/fire3.png">
+        <img id="fire_4" src="fire/fire4.png">
+        <img id="fire_5" src="fire/fire5.png"> 
+    </div>
+
+    <canvas id="canvas" width="480" height="854"></canvas>
+
+    <script>
+    // --- SETTINGS ---
+    const WORLD_WIDTH = 480;
+    const WORLD_HEIGHT = 854;
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d"); 
+
+    document.addEventListener('touchstart', e => { if(e.touches.length > 1) e.preventDefault(); }, { passive: false });
+    document.addEventListener('touchmove', e => { e.preventDefault(); }, { passive: false });
+
+
+    // --- DYNAMIC CHARACTER LOADER ENGINE ---
+    const LAYER_IDS = [
+        "leg_right", "leg_left", "body_img", "arm_left", "arm_right", "face", 
+        "mouth_shut", "mouth_open", "eyes_open", "eyes_closed", "eyes_wide", "eyes_tears", 
+        "eyebrows", "eyebrows_frown", "eyelids"
+    ];
+    
+    const HEAD_IDS = ["face", "mouth_shut", "mouth_open", "eyes_open", "eyes_closed", "eyes_wide", "eyes_tears", "eyebrows", "eyebrows_frown", "eyelids"];
+
+    let activeCharacterIndex = 0; 
+    let activeCharacterFolder = "";
+    const PRELOADED_CHARACTERS_CACHE = {};
+
+    function loadCharacterConfig(index = 0) {
+        const preloader = document.getElementById("preloader");
+        
+        if (typeof CHARACTERS_DATA !== 'undefined' && CHARACTERS_DATA.length > 0) {
+            activeCharacterIndex = index % CHARACTERS_DATA.length;
+            const currentCharacter = CHARACTERS_DATA[activeCharacterIndex];
+            activeCharacterFolder = `characters/${currentCharacter.folderName}`;
+
+            if (Object.keys(PRELOADED_CHARACTERS_CACHE).length === 0) {
+                CHARACTERS_DATA.forEach(char => {
+                    PRELOADED_CHARACTERS_CACHE[char.folderName] = {};
+                    LAYER_IDS.forEach(id => {
+                        let fileName = id;
+                        if (id === "body_img") fileName = "body";
+                        const imgCache = new Image();
+                        imgCache.src = `characters/${char.folderName}/${fileName}.png`;
+                        PRELOADED_CHARACTERS_CACHE[char.folderName][id] = imgCache;
+                    });
+                });
+            }
+        }
+
+        LAYER_IDS.forEach(id => {
+            let imgElement = document.getElementById(id);
+            if (!imgElement) {
+                imgElement = document.createElement("img");
+                imgElement.id = id;
+                preloader.appendChild(imgElement);
+            }
+            let fileName = id;
+            if (id === "body_img") fileName = "body";
+            imgElement.src = `${activeCharacterFolder}/${fileName}.png`;
+        });
+    }
+    
+    loadCharacterConfig(0);
+
+    const LAVA_IDS = ["lava_1", "lava_2", "lava_3", "lava_4", "lava_5"];
+    let lavaFrameIndex = 0;
+    let lastLavaUpdate = 0;
+    const LAVA_FPS = 4; 
+    const LAVA_INTERVAL = 1000 / LAVA_FPS; 
+
+    const FIRE_IDS = ["fire_1", "fire_2", "fire_3", "fire_4", "fire_5"];
+    let fireFrameIndex = 0;
+    let lastFireUpdate = 0;
+    const FIRE_FPS = 8; 
+    const FIRE_INTERVAL = 1000 / FIRE_FPS;
+
+    let cloudX = 0;
+    const CLOUD_SPEED = 0.5; 
+
+    const SINK_TRIGGER_Y = 800; 
+    const BRIDGE_Y = 455;
+    const BLACK_ATMOSPHERE_TRIGGER_Y = BRIDGE_Y + 50; 
+    const WHITE_ATMOSPHERE_TRIGGER_Y = BRIDGE_Y - 200; 
+
+    const hero = { 
+        x: WORLD_WIDTH, 
+        y: BRIDGE_Y - 160, 
+        w: 140,  
+        h: 160, 
+        vx: 0, 
+        vy: 0, 
+        dragVx: 0, 
+        lastX: WORLD_WIDTH, 
+        gravity: 0.8, 
+        friction: 0.95,
+        minJump: -12, 
+        groundY: SINK_TRIGGER_Y, 
+        isGrounded: true, 
+        isBeingDragged: false,
+        isSunk: false,
+        isWalkingIn: false, 
+        hasAscended: false, 
+        isTearingUp: false 
+    };
+
+    let currentMessage = "", messageTimer = 0, ripples = []; 
+    let startX = 0, startY = 0, startTime = 0, dragOffsetX = 0, dragOffsetY = 0, startedOnGround = false;
+
+    // Heaven Logic Configurations
+    let heavenTimer = 0;
+    const HEAVEN_DURATION = 75;  
+    const FADE_OUT_START = HEAVEN_DURATION - 15; 
+    let currentHeavenAlpha = 1.0;               
+
+    // Atmosphere Fade Configurations
+    let currentAtmosphereLayers = 0; 
+    let atmosphereFadeTimer = 0;     
+    const ATMOSPHERE_FADE_DURATION = 4620;   
+
+    // White Atmosphere Tracking System
+    let currentWhiteAtmosphereLayers = 0;
+
+    // Eye Blinking Logic
+    let isBlinking = false;
+    let blinkTimer = 0;
+    let nextBlinkCheck = 0; 
+
+    let particles = [];
+    let ambientLavaParticles = [];
+    let sweatParticles = [];
+    let smokeParticles = []; 
+    const PARTICLE_GRAVITY = 0.15;
+
+    // --- UI SCROLL ANIMATION & TEXT SCROLL STATE SYSTEM ---
+    let scrollState = "DESCENDING"; 
+    let scrollGlobalY = -WORLD_HEIGHT; 
+    let isInitialGameStart = true;   
+
+    const UPPER_CLOSED_SHIFT = 300;  
+    const BELOW_CLOSED_SHIFT = -300; 
+
+    let upperCurrentShift = UPPER_CLOSED_SHIFT;
+    let belowCurrentShift = BELOW_CLOSED_SHIFT;
+    let scrollFadeAlpha = 1.0; 
+    let bgDimAlpha = 0.0; 
+
+    // Text scroll parameters inside the card layout context
+    let textScrollOffsetY = 0;
+    let isDraggingText = false;
+    let textDragLastY = 0;
+    let textScrollVelocityY = 0;
+    let maxTextScrollHeight = 0; 
+
+    // Interactive Scroll Card UI Head State Trackers
+    let scrollHeadReactionTimer = 0;
+
+    // --- BUTTON SYSTEM CONFIGURATIONS ---
+    let startButtonAlpha = 0.0; 
+    let okayButtonAlpha = 0.0;
+    let hasScrolledToBottomOnce = false;
+
+    // Button geometric bounding metrics
+    const startBtnRect = { x: (WORLD_WIDTH / 2) - 90, y: 560, w: 180, h: 54 };
+    const okayBtnRect = { x: (WORLD_WIDTH / 2) - 70, y: 680, w: 140, h: 46 };
+
+    const titleWords = [
+        { id: "word_go",   imgId: "GO",   delay: 20, scale: 6.0, targetScale: 1.0, landProgress: 0, shakeTime: 0, xOffset: 0, yOffset: 0 },
+        { id: "word_to",   imgId: "TO",   delay: 35, scale: 6.0, targetScale: 1.0, landProgress: 0, shakeTime: 0, xOffset: 0, yOffset: 0 },
+        { id: "word_hell", imgId: "HELL", delay: 50, scale: 6.0, targetScale: 1.0, landProgress: 0, shakeTime: 0, xOffset: 0, yOffset: 0 },
+    ];
+
+    // Keep track of who went where
+    let judgmentHistory = [];
+
+    // Replace your old text trigger logic with this:
+    // New configuration for the Hell zoom-in effect
+    let hellZoomEffect = {
+        active: false,
+        words: [
+            { imgId: "GO_SMALL",   delay: 0,  scale: 5.0, targetScale: 1.0, shakeTime: 0 },
+            { imgId: "TO_SMALL",   delay: 30, scale: 5.0, targetScale: 1.0, shakeTime: 0 },
+            { imgId: "HELL_SMALL", delay: 80, scale: 5.0, targetScale: 1.0, shakeTime: 0 }
+        ]   
+    };
+
+    // Trigger function to be called when hero hits the lava
+    function triggerHellZoom() {
+        hellZoomEffect.active = true;
+        hellZoomEffect.words.forEach(w => {
+            w.scale = 5.0; // Start zoomed in
+            w.shakeTime = 0;
+        });
+    }
+    function triggerScrollReset(isFirstTime = false) {
+        scrollState = "DESCENDING";
+        scrollGlobalY = -WORLD_HEIGHT;
+        upperCurrentShift = UPPER_CLOSED_SHIFT;
+        belowCurrentShift = BELOW_CLOSED_SHIFT;
+        scrollFadeAlpha = 1.0;
+        bgDimAlpha = 0.0;
+        isInitialGameStart = isFirstTime;
+        textScrollOffsetY = 0;
+        textScrollVelocityY = 0;
+        isDraggingText = false;
+        scrollHeadReactionTimer = 0;
+        
+        // Reset button alphas and state tracking flags
+        startButtonAlpha = 0.0;
+        okayButtonAlpha = 0.0;
+        hasScrolledToBottomOnce = false;
+
+        if (isFirstTime) {
+            titleWords.forEach(word => {
+                word.landProgress = 0;
+                word.scale = 6.0;
+                word.shakeTime = 0;
+            });
+            titleWords[0].delay = 20;
+            titleWords[1].delay = 35;
+            titleWords[2].delay = 50;
+        }
+    }
+
+    function createBurst() {
+        const particleCount = 120; 
+        for (let i = 0; i < particleCount; i++) {
+            const spawnX = Math.random() * WORLD_WIDTH;
+            const angle = (Math.random() * 90 + 45) * Math.PI / 180;
+            const speed = Math.random() * 8 + 4; 
+
+            particles.push({
+                x: spawnX,
+                y: 0,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed, 
+                size: Math.random() * 8 + 6,  
+                alpha: 1.0,
+                fadeSpeed: Math.random() * 0.01 + 0.005,
+                color: `hsl(${Math.random() * 15 + 45}, 100%, ${Math.random() * 20 + 50}%)`
+            });
+        }
+    }
+
+    function createLavaSplash(targetX, targetY) {
+        const splashCount = 60; 
+        for (let i = 0; i < splashCount; i++) {
+            const angle = (Math.random() * -90 - 45) * Math.PI / 180;
+            const speed = Math.random() * 6 + 3; 
+            const redOrangeHue = Math.floor(Math.random() * 25); 
+
+            particles.push({
+                x: targetX + (Math.random() * 40 - 20), 
+                y: targetY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: Math.random() * 6 + 4, 
+                alpha: 1.0,
+                fadeSpeed: Math.random() * 0.02 + 0.015, 
+                color: `hsl(${redOrangeHue}, 100%, 55%)`
+            });
+        }
+    }
+
+    function updateAmbientLavaParticles() {
+        if (ambientLavaParticles.length < 120 && Math.random() < 0.7) {
+            const redOrangeHue = Math.floor(Math.random() * 25); 
+            ambientLavaParticles.push({
+                x: Math.random() * WORLD_WIDTH,
+                y: SINK_TRIGGER_Y + Math.random() * 40,
+                vy: -(Math.random() * 3.5 + 2.0), 
+                vx: Math.random() * 1.2 - 0.6,
+                size: Math.random() * 6 + 3,
+                baseAlpha: Math.random() * 0.5 + 0.4,
+                wobbleSpeed: Math.random() * 0.08 + 0.04,
+                wobbleTime: Math.random() * 100
+            });
+        }
+
+        for (let i = ambientLavaParticles.length - 1; i >= 0; i--) {
+            let p = ambientLavaParticles[i];
+            p.y += p.vy;
+            p.wobbleTime += p.wobbleSpeed;
+            p.x += Math.sin(p.wobbleTime) * 0.6 + p.vx;
+
+            if (p.y < BRIDGE_Y - 150) {
+                ambientLavaParticles.splice(i, 1);
+            }
+        }
+    }
+
+    function triggerSummaryScroll() {
+        // 1. Start with a descending phase so it drops from the top
+        scrollState = "SUMMARY_DESCENDING";
+        
+        // 2. Position it off-screen above the canvas
+        scrollGlobalY = -854; // or -WORLD_HEIGHT
+        
+        // 3. Keep the handles tightly closed together at the start
+        upperCurrentShift = 300;  // UPPER_CLOSED_SHIFT
+        belowCurrentShift = -300; // BELOW_CLOSED_SHIFT
+        
+        // 4. Reset scroll list offsets
+        textScrollOffsetY = 0;
+        textScrollVelocityY = 0;
+    }
+
+    function updateSweatParticles() { 
+        // Spawn if below bridge, not sunk, and add burst effect
+        if (hero.y > BRIDGE_Y - 100 && !hero.isSunk) {
+            // High spawn frequency (30% chance per frame for a 3-particle burst)
+            if (Math.random() < 0.6) {
+                for(let i = 0; i < 3; i++) {
+                    sweatParticles.push({
+                        x: hero.x + (hero.w / 2),
+                        y: hero.y + (hero.h * 0.2), 
+                        vx: (Math.random() - 0.5) * 12, // More intense horizontal spray
+                        vy: (Math.random() - 0.5) * 12, // More intense vertical spray
+                        size: Math.random() * 3 + 1,
+                        alpha: 1.0
+                    });
+                }
+            }
+        }
+
+        // Update particles
+        for (let i = sweatParticles.length - 1; i >= 0; i--) {
+            let p = sweatParticles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.2;      // Gravity arch
+            p.alpha -= 0.04;  // Fade speed
+
+            if (p.alpha <= 0) {
+                sweatParticles.splice(i, 1);
+            }
+        }
+    }
+
+    function updateSmokeParticles() { 
+        // Calculate intensity: 0 at bridge, 1 at lava
+        const depth = Math.max(0, (hero.y - BRIDGE_Y) / (SINK_TRIGGER_Y - BRIDGE_Y));
+        const intensity = Math.min(depth * 1.5, 1); 
+
+        // Spawn smoke: Higher intensity = much more frequent
+        // Added a +0.3 base to make it spawn faster even at the start of the descent
+        if (hero.y > BRIDGE_Y && !hero.isSunk && Math.random() < (0.3 + intensity * 0.7)) {
+            smokeParticles.push({
+                x: hero.x + (hero.w / 2) + (Math.random() * 40 - 20), // Wider spawn area
+                y: hero.y + (hero.h * 0.5),
+                vx: (Math.random() - 0.5) * 4,
+                vy: -Math.random() * 3 - 2, 
+                // MEGA SIZES: Starts at 15 and grows up to 45
+                size: 15 + (Math.random() * 30 * intensity), 
+                alpha: 0.6 + (intensity * 0.2)
+            });
+        }
+
+        for (let i = smokeParticles.length - 1; i >= 0; i--) {
+            let p = smokeParticles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.alpha -= 0.008; // Slower fade for longer lasting smoke
+            p.size += 0.5;    // Faster expansion
+
+            if (p.alpha <= 0) smokeParticles.splice(i, 1);
+        }
+    }
+
+    function updatePhysics() {
+        if (scrollState !== "DONE") {
+            if (scrollState === "UNROLLING" && upperCurrentShift === 0 && !isDraggingText) {
+                textScrollOffsetY += textScrollVelocityY;
+                textScrollVelocityY *= 0.92; 
+                
+                if (textScrollOffsetY > 0) textScrollOffsetY = 0;
+                if (maxTextScrollHeight > 0 && textScrollOffsetY < -maxTextScrollHeight) {
+                    textScrollOffsetY = -maxTextScrollHeight;
+                }
+            }
+            if (scrollHeadReactionTimer > 0) {
+                scrollHeadReactionTimer--;
+            }
+            return;
+        }
+
+        // Check if character is in the "danger zone" (e.g., last 20% of the descent)
+        const dangerThreshold = BRIDGE_Y + 100; 
+        if (hero.y > dangerThreshold && !hero.isSunk) {
+            hero.isTearingUp = true;
+        } else { 
+            hero.isTearingUp = false;
+        }
+
+        if (hero.hasAscended) {
+            hero.vx = 0; hero.vy = 0;
+            heavenTimer++;
+
+            if (heavenTimer >= FADE_OUT_START) {
+                const remainingFrames = HEAVEN_DURATION - heavenTimer;
+                currentHeavenAlpha = Math.max(remainingFrames / 15, 0);  
+            } else {
+                currentHeavenAlpha = 1.0;
+            }
+
+            if (heavenTimer >= HEAVEN_DURATION) {
+                hero.hasAscended = false;
+                heavenTimer = 0;
+                currentHeavenAlpha = 1.0; 
+
+                // 1. Record the choice
+                judgmentHistory.push({ 
+                    folderName: CHARACTERS_DATA[activeCharacterIndex].folderName,
+                    jp_name: CHARACTERS_DATA[activeCharacterIndex].jp_name,
+                    status: "HEAVEN"
+                });
+
+                // 2. Check if that was the last character
+                if (activeCharacterIndex + 1 >= CHARACTERS_DATA.length) {
+                    // Summon the ending scroll!
+                    triggerSummaryScroll();
+                } else {
+                    // Proceed to next character normally
+                    loadCharacterConfig(activeCharacterIndex + 1);
+                    hero.isWalkingIn = true; 
+                    hero.x = WORLD_WIDTH;
+                    hero.y = BRIDGE_Y - hero.h; 
+                }
+            }
+            return;
+        }
+
+        if (hero.isWalkingIn) {
+            if (!hellZoomEffect.active) {
+                hero.x -= 4.0; // + 6969;;  
+            }  
+            if (hero.x <= 170) {
+                hero.x = 170;
+                hero.isWalkingIn = false;
+                triggerScrollReset(false);
+            }
+            return;
+        }
+
+        if (hero.isSunk) { 
+            hero.vx = 0; hero.vy = 0; hero.dragVx = 0;
+            hero.isBeingDragged = false;
+            hero.y += 3.2  ; 
+
+            if (hero.y >= SINK_TRIGGER_Y) {
+                hero.isSunk = false;
+
+                // 1. Record the choice
+                judgmentHistory.push({
+                    folderName: CHARACTERS_DATA[activeCharacterIndex].folderName,
+                    jp_name: CHARACTERS_DATA[activeCharacterIndex].jp_name,
+                    status: "HELL"
+                });
+
+                // 2. Check if that was the last character
+                if (activeCharacterIndex + 1 >= CHARACTERS_DATA.length) {
+                    // Summon the ending scroll!
+                    triggerSummaryScroll();
+                } else {
+                    // Proceed to next character normally
+                    loadCharacterConfig(activeCharacterIndex + 1);
+                    hero.isWalkingIn = true; 
+                    hero.x = WORLD_WIDTH;
+                    hero.y = BRIDGE_Y - hero.h; 
+                    hero.vx = 0; hero.vy = 0;
+                    atmosphereFadeTimer = 0;
+                } 
+            }
+            return;
+        }
+
+        if (!hero.isBeingDragged) {
+            const previousFeetY = hero.y + hero.h;
+
+            hero.vy += hero.gravity;
+            hero.y += hero.vy;
+            hero.x += hero.vx;
+            hero.vx *= hero.friction;
+            hero.dragVx = 0; 
+
+            if (hero.y < 0) {
+                const currentHeight = Math.abs(Math.round(hero.y));
+                if (currentHeight >= 100) { 
+                    hero.hasAscended = true;
+                    heavenTimer = 0;
+                    currentHeavenAlpha = 1.0;
+                    hero.vy = -35;
+                    //currentMessage = "HEAVEN!"; 
+                    messageTimer = 75; 
+                    createBurst(); 
+                    return;
+                }
+            } 
+
+            const currentFeetY = hero.y + hero.h;
+
+            if (currentFeetY >= SINK_TRIGGER_Y) {
+                hero.y = SINK_TRIGGER_Y - hero.h; 
+                hero.isSunk = true; 
+                hero.isGrounded = true;
+                // currentMessage = "(GO TO HELL!!)"; 
+                triggerHellZoom();  
+                messageTimer = 260; 
+                createLavaSplash(hero.x + (hero.w / 2), SINK_TRIGGER_Y);
+            } 
+            else if (hero.vy > 0 && previousFeetY <= BRIDGE_Y && currentFeetY >= BRIDGE_Y) {
+                hero.y = BRIDGE_Y - hero.h; 
+                hero.vy = 0;
+                hero.isGrounded = true;
+                if (Math.abs(hero.vx) < 0.1) hero.vx = 0;
+            } 
+            else {
+                hero.isGrounded = false;
+            }
+
+            if (hero.x < 0) { hero.x = 0; hero.vx *= -0.5; }
+            if (hero.x > WORLD_WIDTH - hero.w) { hero.x = WORLD_WIDTH - hero.w; hero.vx *= -0.5; }
+        } else {
+            hero.vy = 0; hero.vx = 0;
+            hero.dragVx = hero.x - hero.lastX;
+            hero.lastX = hero.x;
+
+            const feetY = hero.y + hero.h;
+            if (feetY >= SINK_TRIGGER_Y) {
+                hero.isSunk = true;
+                hero.isGrounded = true;
+                //currentMessage = "うわぁ！";
+                triggerHellZoom();  
+                messageTimer = 260;
+                createLavaSplash(hero.x + (hero.w / 2), SINK_TRIGGER_Y);
+            }
+
+            const onBridge = (feetY >= BRIDGE_Y - 5 && feetY <= BRIDGE_Y + 5);
+            hero.isGrounded = (feetY >= SINK_TRIGGER_Y) || onBridge;
+        }
+    }
+
+    function render(timestamp) {
+        if (scrollState === "DESCENDING") { 
+            scrollGlobalY += 35; 
+            if (scrollGlobalY >= 0) {
+                scrollGlobalY = 0;
+                scrollState = "UNROLLING";
+            }
+        } else if (scrollState === "UNROLLING") {
+            upperCurrentShift -= 8;
+            belowCurrentShift += 8;
+
+            if (bgDimAlpha < 0.6) {
+                bgDimAlpha += 0.03;
+                if (bgDimAlpha > 0.6) bgDimAlpha = 0.6;
+            }
+
+            if (upperCurrentShift <= 0 || belowCurrentShift >= 0) {
+                upperCurrentShift = 0;
+                belowCurrentShift = 0;
+            }
+        } else if (scrollState === "FADING_OUT") {
+            scrollFadeAlpha -= 0.05; 
+            bgDimAlpha -= 0.03;
+            if (bgDimAlpha < 0) bgDimAlpha = 0;
+
+            if (scrollFadeAlpha <= 0) {
+                scrollFadeAlpha = 0;
+                bgDimAlpha = 0; 
+                scrollState = "DONE"; 
+                
+                if (isInitialGameStart) {
+                    hero.isWalkingIn = true;
+                    hero.x = WORLD_WIDTH; 
+                    hero.y = BRIDGE_Y - hero.h;
+                }
+            }
+        } // --- Phase 1: Scroll drops down from the sky ---
+        else if (scrollState === "SUMMARY_DESCENDING") {
+            if (!hellZoomEffect.active) {
+                scrollGlobalY += 35; // Speed of the drop 
+            }
+            if (scrollGlobalY >= 0) {
+                scrollGlobalY = 0;
+                scrollState = "SUMMARY_UNROLLING"; // Move to the opening phase
+            }
+        } 
+        // --- Phase 2: Scroll spreads open from the center ---
+        else if (scrollState === "SUMMARY_UNROLLING") {
+            upperCurrentShift -= 8; // Move top handle up
+            belowCurrentShift += 8; // Move bottom handle down
+            
+            // Continue dimming up to our target readability opacity
+            if (bgDimAlpha < 0.7) {
+                bgDimAlpha += 0.04;
+                if (bgDimAlpha > 0.7) bgDimAlpha = 0.7;
+            } 
+            
+            // Once fully opened, lock the state to allow reading/rendering content
+            if (upperCurrentShift <= 0 || belowCurrentShift >= 0) {
+                upperCurrentShift = 0;
+                belowCurrentShift = 0;
+                scrollState = "SUMMARY_DONE"; 
+            }
+        }
+
+        updatePhysics();
+        updateSweatParticles();  
+        updateSmokeParticles(); 
+        updateAmbientLavaParticles();
+        ctx.clearRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        ctx.imageSmoothingEnabled = false;
+
+        if (hero.isSunk) {
+            isBlinking = false;
+        } else {
+            if (isBlinking) {
+                blinkTimer--;
+                if (blinkTimer <= 0) {
+                    isBlinking = false;
+                    nextBlinkCheck = timestamp + 2000 + Math.random() * 3500;
+                }
+            } else {
+                if (timestamp >= nextBlinkCheck) {
+                    if (Math.random() < 0.3) {
+                        isBlinking = true;
+                        blinkTimer = 8; 
+                    } else {
+                        nextBlinkCheck = timestamp + 400;
+                    }
+                }
+            }
+        }
+
+    
+
+        const bgImg = document.getElementById("bg_img");
+        if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+            ctx.drawImage(bgImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        }
+
+        const cloudImg = document.getElementById("cloud_img");
+        if (cloudImg && cloudImg.complete && cloudImg.naturalWidth > 0) {
+            cloudX += CLOUD_SPEED;
+            if (cloudX >= WORLD_WIDTH) cloudX = 0;
+            ctx.drawImage(cloudImg, cloudX, 0, WORLD_WIDTH, WORLD_HEIGHT);
+            ctx.drawImage(cloudImg, cloudX - WORLD_WIDTH, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        }
+
+        if (hero.y < 100 || (hero.hasAscended && currentHeavenAlpha > 0)) {
+            ctx.save();
+            
+            if (hero.hasAscended) { ctx.save(); ctx.globalAlpha = currentHeavenAlpha; }
+            const currentHeight = Math.abs(Math.round(hero.y - 100)); 
+            const heavenlyImg = document.getElementById("heavenly_clouds");
+            if (heavenlyImg && heavenlyImg.complete && heavenlyImg.naturalWidth > 0) {
+                const pixelStep = 30; 
+                const unitsPassed = Math.ceil(currentHeight / pixelStep);
+                const finalLayers = Math.min(unitsPassed, 40);
+                for (let i = 0; i < finalLayers; i++) {
+                    ctx.drawImage(heavenlyImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+                }
+            }
+            if (hero.hasAscended) {
+                const rayImg = document.getElementById("heavenly_rays");
+                if (rayImg && rayImg.complete && rayImg.naturalWidth > 0) {
+                    const rayLayers = Math.min(Math.floor(heavenTimer / 2.5), 35);
+                    for (let i = 0; i < rayLayers; i++) {
+                        ctx.drawImage(rayImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+                    }
+                }
+                ctx.restore();
+            }
+            ctx.restore(); 
+        }
+
+        // =====================================================================
+        // PERFECTLY BLENDED HEAVENLY LIGHT DRAG EFFECT (ELLIPTICAL SMOOTH BLEND) 
+        // =====================================================================
+        if (hero.isBeingDragged && hero.y < BRIDGE_Y) { 
+            ctx.save();
+
+            // 1. Precise activation window: begins exactly 150px above the bridge
+            const startFadeY = BRIDGE_Y - 150; 
+            const targetPeakY = 100; // Reaches maximum opacity 100px from the top
+            
+            let proximityRatio = 0;
+            if (hero.y < startFadeY) {
+                proximityRatio = (startFadeY - hero.y) / (startFadeY - targetPeakY);
+                proximityRatio = Math.min(Math.max(proximityRatio, 0), 1.0);
+            }
+
+            // Smooth smoothstep ease configuration
+            const smoothAlpha = proximityRatio * proximityRatio * (3 - 2 * proximityRatio);
+            const rayAlpha = smoothAlpha * 0.75; // Maximum absolute transparency cap
+
+            if (rayAlpha > 0) {
+                ctx.globalAlpha = rayAlpha;
+
+                // Define focal points for the light column
+                const centerX = hero.x + (hero.w / 2);
+                const rayTopY = 0;
+
+                // --- CHANGE THE PADDING HERE TO MAKE THE COLUMN TALLER ---
+                // Changed from + 420 to + 850 to let the beam trail stretch way further down the screen!
+                const rayBottomY = Math.min(WORLD_HEIGHT, hero.y + hero.h + 850); 
+                const totalHeight = rayBottomY - rayTopY;
+
+                // 2. TRANSFORM CANVAS TO CREATE AN OVAL/ELLIPSE SHAPE
+                ctx.translate(centerX, rayTopY);
+                
+                const scaleX = 2.8; 
+                const scaleY = totalHeight / 50; // This automatically recalculates to stretch the new taller height!
+                ctx.scale(scaleX, scaleY); 
+
+                // 3. CREATE THE GRADIENT (Center at 0,0 stretching out to radius 100)
+                const radialGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 100);
+                
+                radialGlow.addColorStop(0.0, "rgba(150, 255, 255, 1.0)");  // Aqua core 
+                radialGlow.addColorStop(0.2, "rgba(100, 255, 255, 0.95)"); // Bright aqua body
+                radialGlow.addColorStop(0.4, "rgba(0, 200, 255, 0.6)");    // Deeper sky blue transition
+                radialGlow.addColorStop(0.7, "rgba(0, 150, 255, 0.2)");    // Soft blue fringe
+                radialGlow.addColorStop(1.0, "rgba(0, 100, 255, 0.0)");    // Perfectly faded out edges
+
+                // 4. RENDER THE ELLIPSE BEAM
+                ctx.fillStyle = radialGlow;
+                ctx.fillRect(-100, 0, 200, 100);
+            }
+            ctx.restore();
+        }
+
+        if (timestamp - lastLavaUpdate >= LAVA_INTERVAL) {
+            lavaFrameIndex = (lavaFrameIndex + 1) % LAVA_IDS.length; 
+            lastLavaUpdate = timestamp;
+        }
+        const lavaImg = document.getElementById(LAVA_IDS[lavaFrameIndex]);
+        if (lavaImg && lavaImg.complete && lavaImg.naturalWidth > 0) {
+            ctx.drawImage(lavaImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        }
+
+        const currentFeetY = hero.y + hero.h;
+        let lavaProximityFactor = 0.0; 
+        if (currentFeetY > BRIDGE_Y) {
+            lavaProximityFactor = Math.min(((currentFeetY - BRIDGE_Y) * 2.5) / (SINK_TRIGGER_Y - BRIDGE_Y), 1.0);
+        } else if (hero.isSunk) {
+            lavaProximityFactor = 1.0;
+        }
+
+        if (lavaProximityFactor > 0) {
+            ctx.save(); 
+            ctx.globalCompositeOperation = "screen";
+            ambientLavaParticles.forEach(p => {
+                ctx.save(); // Pushes state
+                ctx.globalAlpha = p.baseAlpha * lavaProximityFactor;
+                let grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+                const redOrangeHue = Math.floor(Math.random() * 25);
+                grad.addColorStop(0, `hsl(${redOrangeHue}, 100%, 65%)`);
+                grad.addColorStop(0.5, `hsl(${redOrangeHue}, 100%, 45%)`);
+                grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath(); 
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); 
+                ctx.fill();
+                ctx.restore(); // CRITICAL: This was missing, causing a state stack overflow
+            });
+            ctx.restore(); // Restores "screen" composite operation
+        } 
+
+        if (hero.isWalkingIn) {
+            atmosphereFadeTimer++;
+            if (atmosphereFadeTimer < ATMOSPHERE_FADE_DURATION) {
+                currentAtmosphereLayers = currentAtmosphereLayers * Math.max((ATMOSPHERE_FADE_DURATION - atmosphereFadeTimer) / ATMOSPHERE_FADE_DURATION, 0);
+            } else {
+                currentAtmosphereLayers = 0;
+            }
+        } else if (currentFeetY > BLACK_ATMOSPHERE_TRIGGER_Y || hero.isSunk) {
+            currentAtmosphereLayers = Math.min((currentFeetY - BLACK_ATMOSPHERE_TRIGGER_Y) / 10, 25);
+        } else {
+            currentAtmosphereLayers = 0;
+        }
+
+        if (currentAtmosphereLayers > 0) {
+            const blackImg = document.getElementById("black_atmosphere");
+            if (blackImg && blackImg.complete && blackImg.naturalWidth > 0) {
+                ctx.save();
+                const solidLayers = Math.floor(currentAtmosphereLayers); 
+                const fractionalRemainder = currentAtmosphereLayers - solidLayers;
+                ctx.globalAlpha = 1.0;
+                for (let i = 0; i < solidLayers; i++) ctx.drawImage(blackImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+                if (fractionalRemainder > 0) { ctx.globalAlpha = fractionalRemainder; ctx.drawImage(blackImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT); }
+                ctx.restore();
+            }
+        }
+
+        if (hero.hasAscended) {
+            currentWhiteAtmosphereLayers = currentWhiteAtmosphereLayers * currentHeavenAlpha;
+        } else if (hero.y < WHITE_ATMOSPHERE_TRIGGER_Y) {
+            currentWhiteAtmosphereLayers = Math.min((WHITE_ATMOSPHERE_TRIGGER_Y - hero.y) / 10, 25);
+        } else {
+            currentWhiteAtmosphereLayers = 0;
+        }
+
+        if (currentWhiteAtmosphereLayers > 0) {
+            const whiteImg = document.getElementById("white_atmosphere");
+            if (whiteImg && whiteImg.complete && whiteImg.naturalWidth > 0) {
+                ctx.save();
+                const solidWhiteLayers = Math.floor(currentWhiteAtmosphereLayers);
+                const fractionalWhiteRemainder = currentWhiteAtmosphereLayers - solidWhiteLayers;
+                ctx.globalAlpha = 1.0;
+                for (let i = 0; i < solidWhiteLayers; i++) ctx.drawImage(whiteImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+                if (fractionalWhiteRemainder > 0) { ctx.globalAlpha = fractionalWhiteRemainder; ctx.drawImage(whiteImg, 0, 0, WORLD_WIDTH, WORLD_HEIGHT); }
+                ctx.restore();
+            }
+        }
+
+        if (!hero.hasAscended && hero.y < WHITE_ATMOSPHERE_TRIGGER_Y) {
+            let intensityFactor = Math.min(Math.max((WHITE_ATMOSPHERE_TRIGGER_Y - hero.y) / WHITE_ATMOSPHERE_TRIGGER_Y, 0), 1);
+            ctx.save(); 
+            
+            ctx.globalCompositeOperation = "lighter"; 
+            
+            const centerX = hero.x + (hero.w / 2);
+            const centerY = hero.y + (hero.h / 2);
+            const numRays = 24; 
+            
+            // --- INCREASE THIS VALUE TO MAKE RAYS TALLER/LONGER ---
+            const rayMaxRadius = 550; // Boosted from 320 to 550 to stretch further out!
+            
+            for (let i = 0; i < numRays; i++) {
+                const angle = (i * (Math.PI * 2) / numRays) + (timestamp * 0.0008 * (i % 2 === 0 ? 1 : -1));
+                const rayWidthAngle = 0.06 * (1 + Math.sin(timestamp * 0.005 + i)); 
+                
+                let rayGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, rayMaxRadius);
+                
+                // The gradient stops will now scale proportionally along the new, longer radius length
+                rayGradient.addColorStop(0, `rgba(255, 240, 100, ${0.9 * intensityFactor})`);   
+                rayGradient.addColorStop(0.3, `rgba(255, 165, 0, ${0.5 * intensityFactor})`);  
+                rayGradient.addColorStop(1, 'rgba(255, 100, 0, 0)');                          
+                
+                ctx.fillStyle = rayGradient;
+                ctx.beginPath(); 
+                ctx.moveTo(centerX, centerY);
+                
+                // The arc method automatically reads the larger rayMaxRadius boundary to draw much larger slices
+                ctx.arc(centerX, centerY, rayMaxRadius, angle - rayWidthAngle, angle + rayWidthAngle);
+                ctx.closePath(); 
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // Render Smoke
+        if (smokeParticles.length > 0) { 
+            ctx.save();
+            smokeParticles.forEach(p => {
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = "rgba(100, 100, 100, 0.6)"; // Dark grey smoke
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+
+        // Draw Sweat Particles (Moved outside the lava block so they show up earlier) 
+        // Render Sweat Particles (Place this after the character and lava drawing blocks)
+        if (sweatParticles.length > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = "source-over"; // Reset blending
+            
+            sweatParticles.forEach(p => {
+                ctx.globalAlpha = p.alpha;
+                // Aqua Blue color
+                ctx.fillStyle = "#00FFFF"; 
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+        } 
+
+        ctx.save(); 
+        ctx.beginPath(); ctx.rect(0, 0, WORLD_WIDTH, SINK_TRIGGER_Y); ctx.clip();
+
+        const isYelling = (!hero.isGrounded || hero.isBeingDragged || hero.isSunk);
+        let dynamicAngles = {};
+        
+        if (hero.isBeingDragged) {
+            const dragSpeed = 0.04; const maxDragAngle = 0.4;
+            dynamicAngles.leg_right = Math.sin(timestamp * dragSpeed) * maxDragAngle;
+            dynamicAngles.leg_left  = Math.cos(timestamp * dragSpeed) * maxDragAngle;
+            dynamicAngles.arm_left  = Math.sin(timestamp * dragSpeed + 1) * maxDragAngle;
+            dynamicAngles.arm_right = Math.cos(timestamp * dragSpeed + 1) * maxDragAngle;
+        } 
+        else if (hero.isWalkingIn) {
+            const walkSpeed = 0.012; const maxWalkAngle = 0.35;
+            dynamicAngles.leg_right = Math.sin(timestamp * walkSpeed) * maxWalkAngle;
+            dynamicAngles.leg_left  = -Math.sin(timestamp * walkSpeed) * maxWalkAngle; 
+        }
+        else if (hero.isSunk) {
+            const waveSpeed = 0.03; const waveAmplitude = 0.6;    
+            dynamicAngles.arm_left  = 2.5 + Math.sin(timestamp * waveSpeed) * waveAmplitude;
+            dynamicAngles.arm_right = -2.5 + Math.cos(timestamp * waveSpeed) * waveAmplitude;
+        }
+
+        let headTiltAngle = 0;
+        if (hero.isBeingDragged) {
+            headTiltAngle = Math.min(Math.max(hero.dragVx * -0.015, -0.25), 0.25);
+        }
+
+        if (!hero.hasAscended) {
+            const isBelowBridge = currentFeetY > BLACK_ATMOSPHERE_TRIGGER_Y;
+
+            LAYER_IDS.forEach(id => {
+                const img = document.getElementById(id);
+                if (!img || !img.complete || img.naturalWidth === 0) return;
+                
+                if (id === "mouth_shut" && isYelling) return; 
+                if (id === "mouth_open" && !isYelling) return;
+                if (id === "eyes_open" && (isBlinking || hero.isBeingDragged || hero.isSunk)) return;
+                if (id === "eyes_closed" && !isBlinking) return;
+                if (id === "eyes_wide" && (!hero.isBeingDragged || isBlinking)) return;
+                // Replace your existing line with this: 
+                if (id === "eyes_tears" && !hero.isSunk && !hero.isTearingUp) return;
+                if (id === "eyebrows" && isBelowBridge) return;
+                if (id === "eyebrows_frown" && !isBelowBridge) return;
+                if (id === "eyelids" && (hero.isBeingDragged || hero.isSunk)) return;
+
+                if (dynamicAngles[id] !== undefined) {
+                    ctx.save();
+                    let pivotPctX = 0.5; let pivotPctY = 0.5;
+                    if (id === "arm_left")  { pivotPctX = 0.35; pivotPctY = 0.45; }
+                    if (id === "arm_right") { pivotPctX = 0.65; pivotPctY = 0.45; }
+                    if (id === "leg_left")  { pivotPctX = 0.40; pivotPctY = 0.70; }
+                    if (id === "leg_right") { pivotPctX = 0.60; pivotPctY = 0.70; }
+
+                    const pivotX = hero.x + (hero.w * pivotPctX);
+                    const pivotY = hero.y + (hero.h * pivotPctY);
+                    ctx.translate(pivotX, pivotY); ctx.rotate(dynamicAngles[id]);
+                    ctx.drawImage(img, -hero.w * pivotPctX, -hero.h * pivotPctY, hero.w, hero.h);
+                    ctx.restore();
+                } 
+                else if (hero.isBeingDragged && HEAD_IDS.includes(id)) {
+                    ctx.save();
+                    const neckPivotPctX = 0.50; const neckPivotPctY = 0.38;
+                    ctx.translate(hero.x + (hero.w * neckPivotPctX), hero.y + (hero.h * neckPivotPctY));
+                    ctx.rotate(headTiltAngle);
+                    ctx.drawImage(img, -hero.w * neckPivotPctX, -hero.h * neckPivotPctY, hero.w, hero.h);
+                    ctx.restore();
+                } 
+                else {
+                    ctx.drawImage(img, hero.x, hero.y, hero.w, hero.h); 
+                }
+            });
+        }
+
+        // ... after drawing your main character ... 
+        // 1. Calculate intensity for the gradient
+        // 1. Calculate intensity
+        const depth = Math.max(0, (hero.y - BRIDGE_Y) / (SINK_TRIGGER_Y - BRIDGE_Y));
+        const intensity = Math.min(depth * 1.5, 1);
+
+        ctx.save();
+
+        // 2. Set composite to 'source-in'
+        // This ensures drawing only occurs where the character pixels ALREADY exist.
+        ctx.globalCompositeOperation = "multiply"; 
+
+        // 3. Create a blurred gradient effect
+        // Instead of a sharp rectangle, we use the character's bounds to limit the paint.
+        let grad = ctx.createRadialGradient(
+            hero.x + hero.w / 2, hero.y + hero.h / 2, 0,
+            hero.x + hero.w / 2, hero.y + hero.h / 2, hero.w * 0.6
+        );
+
+        // High intensity means more opacity
+        grad.addColorStop(0.5, `rgba(255, 80, 0, ${0.1 + intensity * 0.6})`);
+        grad.addColorStop(1, 'rgba(255, 80, 0, 0)');
+
+        ctx.fillStyle = grad;
+        ctx.fillRect(hero.x, hero.y, hero.w, hero.h);
+
+        ctx.restore();
+
+        if (hero.isSunk || (hero.y + hero.h >= SINK_TRIGGER_Y)) {
+            if (timestamp - lastFireUpdate >= FIRE_INTERVAL) { fireFrameIndex = (fireFrameIndex + 1) % FIRE_IDS.length; lastFireUpdate = timestamp; }
+            const fireImg = document.getElementById(FIRE_IDS[fireFrameIndex]);
+            if (fireImg && fireImg.complete && fireImg.naturalWidth > 0) ctx.drawImage(fireImg, hero.x, hero.y, hero.w, hero.h);
+        }
+        ctx.restore(); 
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i]; p.vy += PARTICLE_GRAVITY; p.x += p.vx; p.y += p.vy; p.alpha -= p.fadeSpeed;
+            if (p.alpha <= 0 || p.y > WORLD_HEIGHT) { particles.splice(i, 1); continue; }
+            ctx.save(); ctx.globalAlpha = p.alpha;
+            let gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+            gradient.addColorStop(0, p.color); gradient.addColorStop(0.4, p.color); gradient.addColorStop(1, 'rgba(255, 255, 255, 0)'); 
+            ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        for (let i = ripples.length - 1; i >= 0; i--) {
+            let r = ripples[i]; r.radius += 4; r.opacity -= 0.02;
+            if (r.opacity <= 0) { ripples.splice(i, 1); continue; }
+            ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${r.opacity})`; ctx.lineWidth = 3; ctx.stroke();
+        }
+
+        if (messageTimer > 0) {
+            ctx.font = "bold 50px sans-serif"; ctx.textAlign = "center";
+            ctx.strokeStyle = "black"; ctx.lineWidth = 6;
+            ctx.strokeText(currentMessage, WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
+            ctx.fillStyle = "white"; ctx.fillText(currentMessage, WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
+            messageTimer--;
+        } 
+
+        // --- 巻物 UI オーバーレイの描画レンダラー ---
+        if (scrollState === "SUMMARY_DESCENDING" || scrollState === "SUMMARY_UNROLLING" || scrollState === "SUMMARY_DONE") {
+            
+            // Background Dimming Layer
+            if (bgDimAlpha > 0) {
+                ctx.save();
+                ctx.fillStyle = `rgba(0, 0, 0, ${bgDimAlpha})`;
+                ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+                ctx.restore();
+            }
+
+            // Calculate where the center fold lines up based on the falling position
+            const centerLine = Math.round(scrollGlobalY + (WORLD_HEIGHT / 2));
+            const revealTop = Math.round(centerLine - (300 - upperCurrentShift));
+            const revealBottom = Math.round(centerLine + (300 - Math.abs(belowCurrentShift)));
+            const revealHeight = revealBottom - revealTop;
+            
+            const paperUi = document.getElementById("old_paper_ui");
+            const paperUpper = document.getElementById("old_paper_upper");
+            const paperBelow = document.getElementById("old_paper_below");
+            
+            // 1. Draw the unrolling inner paper backing sheet
+            if (paperUi && paperUi.complete && revealHeight > 0) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, revealTop - 2, WORLD_WIDTH, revealHeight + 4);
+                ctx.clip();
+                
+                // Notice scrollGlobalY is passed here so the background paper moves with the drop
+                ctx.drawImage(paperUi, 0, Math.round(scrollGlobalY), WORLD_WIDTH, WORLD_HEIGHT);
+                
+                ctx.restore(); 
+            }
+            
+            // 2. Draw the upper and lower wooden roller handles moving dynamically
+            if (paperUpper && paperUpper.complete) {
+                ctx.drawImage(paperUpper, 0, Math.round(scrollGlobalY + upperCurrentShift) + 2, WORLD_WIDTH, WORLD_HEIGHT);
+            }
+            if (paperBelow && paperBelow.complete) {
+                ctx.drawImage(paperBelow, 0, Math.round(scrollGlobalY + belowCurrentShift) - 2, WORLD_WIDTH, WORLD_HEIGHT);
+            }
+            
+            // Inside your render loop, right when processing the summary text:
+        if (scrollState === "SUMMARY_DONE") {
+            // 1. Initialize our animation anchor if it hasn't been set yet
+            if (summaryStartTime === null) {
+                summaryStartTime = timestamp;
+            }
+
+            const listTopBoundary = revealTop + 50;
+            const listBottomBoundary = revealBottom - 50;
+            const viewableHeight = listBottomBoundary - listTopBoundary;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(40, listTopBoundary, WORLD_WIDTH - 80, viewableHeight);
+            ctx.clip(); 
+
+            let startItemY = listTopBoundary + textScrollOffsetY + 30;
+            const rowHeight = 140; 
+
+            // ending animation  
+            // Calculate total duration needed for one single row's complete sequence:
+            const fadeDuration = 1000;  // 1 second for portrait + name fade-in 
+            const slamDuration = 300;   // 300ms for stamp animation to land
+            const shockDuration = 1000; // 1 second of facial expression change + shaking (Hell only)
+            const totalRowTime = fadeDuration + slamDuration + shockDuration; // 2300ms total per character
+
+            // Global backup cache for fire images to avoid recreating them every single frame
+            if (typeof globalFireCache === 'undefined') {
+                window.globalFireCache = {};
+            }
+
+            judgmentHistory.forEach((record, idx) => { 
+                let itemY = startItemY + (idx * rowHeight);
+
+                if (itemY + rowHeight < listTopBoundary || itemY > listBottomBoundary) return;
+
+                // 1. Target bounding layout coordinates for the face portrait
+                const iconSize = 150;
+                const iconX = 60; 
+                const iconY = itemY;
+
+                // --- SEQUENTIAL TIMING PIPELINE ---
+                const rowDelay = idx * totalRowTime; 
+                const timeElapsed = Math.max(0, (timestamp - summaryStartTime) - rowDelay);
+
+                // If this row's turn hasn't arrived yet in the timeline sequence, skip drawing it entirely
+                if (timeElapsed === 0) return;
+
+                // Calculate Row Asset Base Alpha (clamps smoothly at 1.0)
+                const rowAlpha = Math.min(timeElapsed / fadeDuration, 1.0);
+
+                // Calculate structural triggers for Hell judgments
+                const stampImpactTime = fadeDuration + slamDuration;
+                const isShocked = (record.status === "HELL" && timeElapsed >= stampImpactTime && timeElapsed < stampImpactTime + shockDuration);
+                const isPostShockHell = (record.status === "HELL" && timeElapsed >= stampImpactTime + shockDuration);
+
+                // Apply rumbling vibration vectors ONLY if judged Hell and currently shocked
+                let faceShakeX = 0;
+                let faceShakeY = 0;
+                if (isShocked) {
+                    const shockProgress = (timeElapsed - stampImpactTime) / shockDuration;
+                    const faceIntensity = 6 * (1.0 - shockProgress);
+                    faceShakeX = (Math.random() * 2 - 1) * faceIntensity;
+                    faceShakeY = (Math.random() * 2 - 1) * faceIntensity;
+                }
+
+                // Load face layers dynamically from the preloaded character cache
+                ctx.save();
+                ctx.globalAlpha = rowAlpha;
+                
+                const charCache = PRELOADED_CHARACTERS_CACHE[record.folderName];
+                if (charCache) {
+                    // --- DYNAMIC FACIAL EXPRESSION LAYER SWITCHES ---
+                    let eyeAsset = "eyes_open";
+                    let mouthAsset = "mouth_shut";
+
+                    if (isShocked) {
+                        eyeAsset = "eyes_wide";
+                        mouthAsset = "mouth_open";
+                    } else if (isPostShockHell) {
+                        eyeAsset = "eyes_tears"; 
+                        mouthAsset = "mouth_open";  
+                    }
+
+                    const headLayers = ["face", eyeAsset, "eyebrows", mouthAsset];
+                    
+                    headLayers.forEach(layerId => {
+                        const layerImg = charCache[layerId];
+                        if (layerImg && layerImg.complete) {
+                            ctx.drawImage(layerImg, (iconX - 20) + faceShakeX, iconY + faceShakeY, iconSize, iconSize);
+                        }
+                    }); 
+                }
+                
+                // --- FOOLPROOF ON-FACE LOOPING FIRE ANIMATION OVERLAY ---
+                // >>> CRITICAL FIX: Only render fire if time threshold is passed AND character is bound for HELL <<<
+                if (record.status === "HELL" && timeElapsed >= stampImpactTime) {
+                    const fireFrameInterval = 100; // 100ms speed per flame frame swap
+                    const totalFireFrames = 5;     // fire1 through fire5
+                    
+                    const fireTicks = Math.floor((timestamp - (summaryStartTime + rowDelay + stampImpactTime)) / fireFrameInterval);
+                    const currentFireIndex = (fireTicks % totalFireFrames) + 1; // 1, 2, 3, 4, 5
+                    
+                    // 1. Try to pull from HTML DOM elements first
+                    let fireImg = document.getElementById(`fire${currentFireIndex}`);
+                    
+                    // 2. Fallback: If DOM lookup fails, check or initialize our clean background loader
+                    if (!fireImg || !fireImg.complete) {
+                        if (!globalFireCache[currentFireIndex]) {
+                            globalFireCache[currentFireIndex] = new Image();
+                            globalFireCache[currentFireIndex].src = `fire/fire${currentFireIndex}.png`;
+                        }
+                        fireImg = globalFireCache[currentFireIndex];
+                    }
+                    
+                    // Render the animation layer if image file is flagged ready
+                    if (fireImg && fireImg.complete && fireImg.naturalWidth > 0) {
+                        ctx.drawImage(fireImg, (iconX - 20) + faceShakeX + 20, iconY + faceShakeY - 20, iconSize - 30, iconSize/2 + 20);  
+                    }
+                }
+                ctx.restore();
+
+                // 2. Draw Character Name plate
+                ctx.save();
+                ctx.globalAlpha = rowAlpha;
+                ctx.textAlign = "center"; 
+                ctx.textBaseline = "top"; 
+                ctx.fillStyle = "#5c3a21"; 
+                ctx.font = "bold 15px sans-serif"; 
+                ctx.fillText(record.jp_name, iconX + 230, iconY + 30); 
+                ctx.restore();
+
+                // 3. Draw Judged Status alongside the right container space
+                if (timeElapsed > fadeDuration) {
+                    ctx.save();
+
+                    const stampTime = timeElapsed - fadeDuration; 
+                    const progress = Math.min(stampTime / slamDuration, 1.0);
+                    
+                    const textScale = progress < 1.0 ? 5.0 - (4.0 * Math.pow(progress, 3)) : 1.0;
+                    const textAlpha = Math.min(stampTime / 100, 1.0);
+
+                    const targetTextX = WORLD_WIDTH - 165;
+                    const targetTextY = iconY + 30;
+
+                    // =====================================================================
+                    // CASE A: HEAVEN STAMP (CLEAN FADE/SLAM IN & LOCK SOLID)
+                    // =====================================================================
+                    if (record.status === "HEAVEN") {
+                        ctx.translate(targetTextX - 20, targetTextY + 10);
+                        ctx.scale(textScale, textScale);
+                        ctx.globalAlpha = textAlpha;
+
+                        ctx.lineWidth = 4;
+                        ctx.strokeStyle = "#b8860b"; 
+                        ctx.lineJoin = "miter";
+                        
+                        const stampW = 180;
+                        const stampH = 55;
+                        ctx.strokeRect(-stampW / 2, -stampH / 2, stampW, stampH);
+
+                        ctx.textBaseline = "middle";
+                        ctx.textAlign = "center";
+                        ctx.fillStyle = "#b8860b";
+                        ctx.font = "bold 40px sans-serif";
+                        ctx.fillText("天国往生", 0, 0);
+                    } 
+                    // =====================================================================
+                    // CASE B: HELL STAMP (ROTATED ZOOM, SLAM, & STAMP RUMBLE SHAKE)
+                    // =====================================================================
+                    else { 
+                        let stampShakeX = 0;
+                        let stampShakeY = 0;
+                        if (stampTime > slamDuration && stampTime < slamDuration + 200) {
+                            const shakeProgress = (stampTime - slamDuration) / 200;
+                            const intensity = 8 * (1.0 - shakeProgress);
+                            stampShakeX = (Math.random() * 2 - 1) * intensity;
+                            stampShakeY = (Math.random() * 2 - 1) * intensity;
+                        }
+
+                        ctx.translate(targetTextX + stampShakeX, targetTextY + stampShakeY);
+                        ctx.rotate(-30 * Math.PI / 180); 
+                        ctx.scale(textScale, textScale);
+                        ctx.globalAlpha = textAlpha;
+
+                        ctx.lineWidth = 4;
+                        ctx.strokeStyle = "#8b0000"; 
+                        ctx.lineJoin = "miter";
+                        
+                        const stampW = 180;
+                        const stampH = 55;
+                        ctx.strokeRect(-stampW / 2, -stampH / 2, stampW, stampH);
+
+                        ctx.textBaseline = "middle";
+                        ctx.textAlign = "center";
+                        ctx.fillStyle = "#8b0000";
+                        ctx.font = "bold 40px sans-serif";
+                        ctx.fillText("堕地獄行", 0, 0);
+                    }
+
+                    ctx.restore();
+                }
+
+                // Decorative separation underline border splitters
+                ctx.save();
+                ctx.globalAlpha = rowAlpha;
+                ctx.strokeStyle = "rgba(92, 58, 33, 0.15)";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                const lineY = iconY + iconSize + 28; 
+                ctx.moveTo(70, lineY);
+                ctx.lineTo(WORLD_WIDTH - 70, lineY);
+                ctx.stroke();
+                ctx.restore();
+            });
+
+            ctx.restore();
+        } else {
+            // Reset anchor back to null when not viewing the summary screen
+            summaryStartTime = null;
+        }
+            
+        }
+        
+        if (scrollState !== "DONE" && scrollState !== "SUMMARY_DESCENDING" && scrollState !== "SUMMARY_UNROLLING" && scrollState !== "SUMMARY_DONE") { 
+            if (bgDimAlpha > 0) {
+                ctx.save(); ctx.fillStyle = `rgba(0, 0, 0, ${bgDimAlpha})`; ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT); ctx.restore();
+            }
+
+            const paperUi = document.getElementById("old_paper_ui");
+            const paperUpper = document.getElementById("old_paper_upper");
+            const paperBelow = document.getElementById("old_paper_below");
+
+            ctx.save();
+            ctx.globalAlpha = scrollFadeAlpha; 
+            ctx.imageSmoothingEnabled = false;
+
+            if (scrollState === "UNROLLING" || scrollState === "FADING_OUT") {
+                const centerLine = Math.round(scrollGlobalY + (WORLD_HEIGHT / 2));
+                const revealTop = Math.round(centerLine - (UPPER_CLOSED_SHIFT - upperCurrentShift));
+                const revealBottom = Math.round(centerLine + (Math.abs(BELOW_CLOSED_SHIFT) - Math.abs(belowCurrentShift)));
+                const revealHeight = revealBottom - revealTop;
+
+                if (paperUi && paperUi.complete && revealHeight > 0) { 
+                    ctx.save();
+                    ctx.beginPath(); ctx.rect(0, revealTop - 2, WORLD_WIDTH, revealHeight + 4); ctx.clip();
+                    ctx.drawImage(paperUi, 0, Math.round(scrollGlobalY), WORLD_WIDTH, WORLD_HEIGHT);
+
+                    if (upperCurrentShift === 0) {
+                        if (!isInitialGameStart) {
+                            // --- DYNAMIC CONTENT VIEW AREA DRAWING --- 
+                            if (typeof CHARACTERS_DATA !== 'undefined' && CHARACTERS_DATA.length > 0) {
+                                const data = CHARACTERS_DATA[activeCharacterIndex];
+                                
+                                const viewAreaTop = revealTop + 20;
+                                const viewAreaBottom = revealBottom - 20; 
+                                const viewAreaHeight = viewAreaBottom - viewAreaTop;
+
+                                ctx.save();
+                                ctx.beginPath(); ctx.rect(40, viewAreaTop, WORLD_WIDTH - 20, viewAreaHeight); ctx.clip();
+
+                                // 拡大した顔パーツの描画サイズと位置設定
+                                const faceWidth = 200; 
+                                const faceHeight = 240;
+                                
+                                // Click shake modification behavior
+                                let headShakeX = 0;
+                                let headShakeY = 0;
+                                if (scrollHeadReactionTimer > 0) {
+                                    headShakeX = (Math.random() - 0.5) * 8;
+                                    headShakeY = (Math.random() - 0.5) * 8;
+                                }
+
+                                const faceX = (WORLD_WIDTH / 2) - (faceWidth / 2) + headShakeX;
+                                const faceY = viewAreaTop + textScrollOffsetY + headShakeY; 
+
+                                // Render engine loop for the face elements inside the text clip bounds 
+                                const faceParts = ["face", "eyes_open", "eyes_closed", "eyes_wide", "eyelids", "eyebrows", "mouth_shut", "mouth_open"];
+
+                                faceParts.forEach(partId => {
+                                    const partImg = document.getElementById(partId);
+                                    if (partImg && partImg.complete && partImg.naturalWidth > 0) {
+                                        
+                                        // --- 1. Reaction Logic (Clicked State) ---
+                                        if (scrollHeadReactionTimer > 0) {
+                                            // When clicked: Show wide eyes and open mouth, hide standard parts
+                                            if (partId === "eyes_open" || partId === "eyes_closed" || partId === "mouth_shut" || partId === "eyelids") return;
+                                        } 
+                                        // --- 2. Idle / Standard Logic ---
+                                        else {
+                                            // Hide interaction-only parts
+                                            if (partId === "eyes_wide" || partId === "mouth_open") return;
+                                            
+                                            // Handle Blinking (Switching between eyes_open and eyes_closed)
+                                            if (isBlinking) {
+                                                if (partId === "eyes_open" || partId === "eyelids") return;
+                                            } else {
+                                                if (partId === "eyes_closed") return;
+                                            }
+                                        }
+
+                                        ctx.drawImage(partImg, faceX, faceY, faceWidth, faceHeight);
+                                    }
+                                });
+
+                                // テキストの描画開始位置。元々の位置から120px上に移動
+                                let renderCursorY = viewAreaTop + textScrollOffsetY + faceHeight + 30 - 100;
+
+                                ctx.textAlign = "center"; 
+
+                                // キャラクター名 (日本語)
+                                ctx.fillStyle = "#3a2212";
+                                ctx.font = "bold 27px sans-serif";
+                                ctx.fillText(data.jp_name, WORLD_WIDTH / 2, renderCursorY);
+                                renderCursorY += 40;
+
+                                // 出典元作品 (日本語)
+                                ctx.fillStyle = "#6e4a32";
+                                ctx.font = "bold 25px sans-serif";
+                                ctx.fillText(data.jp_origin, WORLD_WIDTH / 2, renderCursorY); 
+                                renderCursorY += 45;
+
+                                // 説明文 (日本語) の自動改行
+                                ctx.fillStyle = "#4a2f1b";
+                                
+                                function wrapAndRenderTextCentered(text, startY, lineHeight, fontSize, maxW) {
+                                    ctx.font = `${fontSize}px sans-serif`;
+                                    let words = text.split(''); 
+                                    let line = '';
+                                    let currentY = startY; 
+
+                                    for (let n = 0; n < words.length; n++) {
+                                        let testLine = line + words[n];
+                                        let metrics = ctx.measureText(testLine);
+                                        if (metrics.width > maxW && n > 0) {
+                                            ctx.fillText(line, WORLD_WIDTH / 2, currentY);
+                                            line = words[n];
+                                            currentY += lineHeight;
+                                        } else {
+                                            line = testLine;
+                                        }
+                                    }
+                                    ctx.fillText(line, WORLD_WIDTH / 2, currentY);
+                                    return currentY; 
+                                }
+
+                                const endTextY = wrapAndRenderTextCentered(data.jp_text, renderCursorY, 34, 24, 300); 
+                                
+                                const contentTotalHeight = (endTextY + 40) - (viewAreaTop + textScrollOffsetY);
+                                maxTextScrollHeight = Math.max(0, contentTotalHeight - viewAreaHeight);
+
+                                // --- LAYERED EDGE FADEOUT SYSTEM --- 
+                                const fadeSize = 35;        
+                                const fadeLeftX = 60;      
+                                const fadeWidth = WORLD_WIDTH - (fadeLeftX * 2); 
+
+                                // Calculate fade intensities (0.0 to 1.0)
+                                // Top fade is strong when we are scrolled down (offset < 0)
+                                const topFadeIntensity = Math.min(Math.abs(textScrollOffsetY) / 20, 1.0);
+                                // Bottom fade is strong when we haven't reached the bottom yet
+                                const bottomFadeIntensity = maxTextScrollHeight > 0 
+                                    ? Math.min((maxTextScrollHeight - Math.abs(textScrollOffsetY)) / 20, 1.0) 
+                                    : 0; 
+
+                                // 1. Upper Edge Fade Out
+                                if (topFadeIntensity > 0) {
+                                    ctx.save();
+                                    ctx.beginPath(); 
+                                    ctx.rect(fadeLeftX, viewAreaTop, fadeWidth, fadeSize); 
+                                    ctx.clip();
+
+                                    let topGrad = ctx.createLinearGradient(0, viewAreaTop, 0, viewAreaTop + fadeSize);
+                                    // Use the dynamic intensity for the alpha
+                                    topGrad.addColorStop(0, `rgba(0, 0, 0, ${0.4 * topFadeIntensity})`); 
+                                    topGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                                    ctx.fillStyle = topGrad;
+                                    ctx.fillRect(fadeLeftX, viewAreaTop, fadeWidth, fadeSize);
+                                    ctx.restore();
+                                }
+
+                                // 2. Bottom Edge Fade Out
+                                if (bottomFadeIntensity > 0) {
+                                    ctx.save();
+                                    ctx.beginPath(); 
+                                    ctx.rect(fadeLeftX, viewAreaBottom - fadeSize, fadeWidth, fadeSize); 
+                                    ctx.clip();
+
+                                    let bottomGrad = ctx.createLinearGradient(0, viewAreaBottom, 0, viewAreaBottom - fadeSize);
+                                    // Use the dynamic intensity for the alpha
+                                    bottomGrad.addColorStop(0, `rgba(0, 0, 0, ${0.4 * bottomFadeIntensity})`);
+                                    bottomGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                                    ctx.fillStyle = bottomGrad;
+                                    ctx.fillRect(fadeLeftX, viewAreaBottom - fadeSize, fadeWidth, fadeSize);
+                                    ctx.restore();
+                                }
+
+                                ctx.restore(); // Restores text view-clipping context safely
+
+                                // スクロールインジケーターバーの描画
+                                if (maxTextScrollHeight > 0) {
+                                    ctx.save();
+                                    ctx.fillStyle = "rgba(92, 58, 33, 0.15)";
+                                    ctx.fillRect(WORLD_WIDTH - 25, viewAreaTop, 4, viewAreaHeight);
+                                    
+                                    const barHeight = Math.max(20, (viewAreaHeight / contentTotalHeight) * viewAreaHeight);
+                                    const scrollPercentage = textScrollOffsetY / -maxTextScrollHeight;
+                                    const barY = viewAreaTop + (scrollPercentage * (viewAreaHeight - barHeight));
+                                    
+                                    ctx.fillStyle = "rgba(92, 58, 33, 0.6)";
+                                    ctx.fillRect(WORLD_WIDTH - 50, barY, 6, barHeight);
+                                    ctx.restore();
+                                }
+
+                                // --- Character Scroll: "了解" Button Fade-in Handling ---
+                                if (hasScrolledToBottomOnce && scrollState !== "FADING_OUT") {
+                                    if (okayButtonAlpha < 1.0) okayButtonAlpha += 0.05;
+                                }
+                                if (okayButtonAlpha > 0) {
+                                    ctx.save();
+                                    ctx.globalAlpha = okayButtonAlpha * scrollFadeAlpha;
+                                    
+                                    // Button background contour
+                                    ctx.fillStyle = "#4a2311";
+                                    ctx.strokeStyle = "#d4b383";
+                                    ctx.lineWidth = 3;
+                                    ctx.beginPath();
+                                    ctx.roundRect(okayBtnRect.x, okayBtnRect.y, okayBtnRect.w, okayBtnRect.h, 6);
+                                    ctx.fill();
+                                    ctx.stroke();
+                                    
+                                    // Button textual overlay
+                                    ctx.fillStyle = "#f4ebd0";
+                                    ctx.font = "bold 20px sans-serif";
+                                    ctx.textAlign = "center";
+                                    ctx.textBaseline = "middle";
+                                    ctx.fillText("了解", okayBtnRect.x + (okayBtnRect.w / 2), okayBtnRect.y + (okayBtnRect.h / 2));
+                                    ctx.restore();
+                                }
+                            }
+                        }
+                    }
+                    ctx.restore(); 
+                }
+            }
+
+            if (paperUpper && paperUpper.complete) ctx.drawImage(paperUpper, 0, Math.round(scrollGlobalY + upperCurrentShift) + 2, WORLD_WIDTH, WORLD_HEIGHT);
+            if (paperBelow && paperBelow.complete) ctx.drawImage(paperBelow, 0, Math.round(scrollGlobalY + belowCurrentShift) - 2, WORLD_WIDTH, WORLD_HEIGHT);
+
+            if (scrollState === "UNROLLING" || scrollState === "FADING_OUT") {
+                if (upperCurrentShift === 0 && isInitialGameStart) {
+                    titleWords.forEach((word) => {
+                        if (scrollState !== "FADING_OUT") word.delay--;
+                        if (word.delay <= 0) {
+                            if (word.landProgress < 1) {
+                                word.landProgress += 0.12; if (word.landProgress > 1) word.landProgress = 1;
+                                word.scale = 4.0 - (3.0 * word.landProgress);
+                            } else {
+                                if (word.shakeTime < 25) { 
+                                    word.shakeTime++; const shakeMagnitude = 8 * (1.0 - word.shakeTime / 25);
+                                    word.xOffset = (Math.random() - 0.5) * shakeMagnitude; word.yOffset = (Math.random() - 0.5) * shakeMagnitude;
+                                } else { word.xOffset = 0; word.yOffset = 0; }
+                            }
+                            const wordImg = document.getElementById(word.imgId);
+                            if (wordImg && wordImg.complete) {
+                                ctx.save();
+                                const tw = WORLD_WIDTH * word.scale; const th = WORLD_HEIGHT * word.scale;
+                                ctx.drawImage(wordImg, 0, 0, wordImg.naturalWidth, wordImg.naturalHeight, (WORLD_WIDTH / 2) - (tw / 2) + word.xOffset, (WORLD_HEIGHT / 2) - (th / 2) + scrollGlobalY + word.yOffset, tw, th);
+                                ctx.restore();
+                            }
+                        }
+                    });
+
+                    // --- Title Scroll: "裁判開始" Button Fade-in Handling ---
+                    if (titleWords[2].landProgress >= 1 && scrollState !== "FADING_OUT") {
+                        if (startButtonAlpha < 1.0) startButtonAlpha += 0.04;
+                    }
+
+                    if (startButtonAlpha > 0) {
+                        ctx.save();
+                        
+                        // Calculate a rhythmic 1-second pulse modifier using the runtime timestamp
+                        let pulseModifier = 0.75 + 0.25 * Math.sin(timestamp * (Math.PI * 2 / 1000));
+                        
+                        // Apply both the fade alpha and the pulsing visibility multiplier
+                        ctx.globalAlpha = startButtonAlpha * scrollFadeAlpha * pulseModifier;
+                        
+                        // Styled outer crimson red boundary container
+                        ctx.fillStyle = "#4a0d0d"; 
+                        ctx.strokeStyle = "#9e2a2b"; 
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.roundRect(startBtnRect.x, startBtnRect.y, startBtnRect.w, startBtnRect.h, 8);
+                        ctx.fill();
+                        ctx.stroke();
+
+                        // Calligraphy text overlay formatting
+                        ctx.fillStyle = "#ffdddd";
+                        ctx.font = "bold 24px sans-serif";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillText("裁判開始", startBtnRect.x + (startBtnRect.w / 2), startBtnRect.y + (startBtnRect.h / 2));
+                        ctx.restore();
+                    }
+                }
+            }
+            ctx.restore(); 
+        }
+
+
+
+        if (hellZoomEffect.active) {
+            let allFinished = true; 
+
+            hellZoomEffect.words.forEach((word, index) => {
+                if (word.delay > 0) {
+                    word.delay--;
+                    allFinished = false;
+                    return;
+                }
+
+                const img = document.getElementById(word.imgId);
+                if (img && img.complete) {
+                    ctx.save();
+                    
+                    // Zoom logic
+                    if (word.scale > word.targetScale) {
+                        word.scale -= 0.15;
+                        allFinished = false;
+                    } else {
+                        // Once reached, trigger shake
+                        word.shakeTime++;
+                    }
+
+                    // Stretch to fill screen dimensions
+                    const drawWidth = WORLD_WIDTH * word.scale;
+                    const drawHeight = WORLD_HEIGHT * word.scale;
+                    
+                    // Center the stretched image
+                    let x = (WORLD_WIDTH / 2) - (drawWidth / 2);
+                    let y = (WORLD_HEIGHT / 2) - (drawHeight / 2);
+
+                    // Add shake
+                    if (word.scale <= word.targetScale) {
+                        x += (Math.random() - 0.5) * 20 * Math.sin(word.shakeTime * 0.5);
+                        y += (Math.random() - 0.5) * 20 * Math.cos(word.shakeTime * 0.5);
+                    }
+
+                    ctx.drawImage(img, x, y, drawWidth, drawHeight);
+                    ctx.restore(); 
+                }
+            });
+
+            if (allFinished && hellZoomEffect.words[2].shakeTime > 60) {
+                hellZoomEffect.active = false;
+                hellZoomEffect.words = [
+                    { imgId: "GO_SMALL",   delay: 0,  scale: 5.0, targetScale: 1.0, shakeTime: 0 },
+                    { imgId: "TO_SMALL",   delay: 30, scale: 5.0, targetScale: 1.0, shakeTime: 0 },
+                    { imgId: "HELL_SMALL", delay: 80, scale: 5.0, targetScale: 1.0, shakeTime: 0 }
+                ]; 
+            }
+        }
+
+        requestAnimationFrame(render);
+    }
+
+    // --- INPUT MANAGEMENT --- 
+    $.touch.ready(function () {
+        $('#canvas').touchable({
+            touchDown: function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = WORLD_WIDTH / rect.width; const scaleY = WORLD_HEIGHT / rect.height;
+                let nativeEvent = e.originalEvent || e;
+                let clientX = e.clientX; let clientY = e.clientY;
+
+                if (clientX === undefined && nativeEvent.touches && nativeEvent.touches.length > 0) {
+                    clientX = nativeEvent.touches[0].clientX; clientY = nativeEvent.touches[0].clientY;
+                }
+                if (clientX === undefined) return; 
+
+                const tx = (clientX - rect.left) * scaleX; const ty = (clientY - rect.top) * scaleY;
+
+                if (scrollState !== "DONE") {
+                    if (scrollState === "UNROLLING" && upperCurrentShift === 0) {
+                        
+                        // 1. Initial Title Screen Logic Intercept
+                        if (isInitialGameStart) {
+                            if (startButtonAlpha >= 0.9 &&
+                                tx >= startBtnRect.x && tx <= startBtnRect.x + startBtnRect.w &&
+                                ty >= startBtnRect.y && ty <= startBtnRect.y + startBtnRect.h) {
+                                scrollState = "FADING_OUT";
+                            }
+                            return; 
+                        }
+
+                        // 2. Character Data Cards Logic Intercept
+                        const centerLine = Math.round(scrollGlobalY + (WORLD_HEIGHT / 2));
+                        const revealTop = Math.round(centerLine - UPPER_CLOSED_SHIFT);
+                        const revealBottom = Math.round(centerLine + Math.abs(BELOW_CLOSED_SHIFT));
+                        
+                        const innerTop = revealTop + 60;
+                        const innerBottom = revealBottom - 80;
+
+                        // Check collision with the "了解" button if it's shown
+                        if (hasScrolledToBottomOnce && okayButtonAlpha >= 0.9 &&
+                            tx >= okayBtnRect.x && tx <= okayBtnRect.x + okayBtnRect.w &&
+                            ty >= okayBtnRect.y && ty <= okayBtnRect.y + okayBtnRect.h) {
+                            scrollState = "FADING_OUT";
+                            return;
+                        }
+
+                        // Check collision targeting the floating head inside the unrolled parchment
+                        const localFaceWidth = 200;
+                        const localFaceHeight = 240;
+                        const localFaceX = (WORLD_WIDTH / 2) - (localFaceWidth / 2);
+                        const localFaceY = innerTop + textScrollOffsetY;
+
+                        if (tx >= localFaceX && tx <= localFaceX + localFaceWidth &&
+                            ty >= localFaceY && ty <= localFaceY + localFaceHeight) {
+                            scrollHeadReactionTimer = 18; // Trigger dynamic click action frames
+                            return;
+                        }
+
+                        // Allow normal scrolling interaction inside the text clip viewport bounds
+                        if (tx >= 40 && tx <= WORLD_WIDTH - 40 && ty >= innerTop && ty <= innerBottom) {
+                            isDraggingText = true;
+                            textDragLastY = ty;
+                            textScrollVelocityY = 0;
+                        }
+                    }
+                    return;
+                } 
+
+                if (hero.isSunk || hero.isWalkingIn || hero.hasAscended) return;
+
+                ripples.push({ x: tx, y: ty, radius: 5, opacity: 1.0 });
+                startX = tx; startY = ty; startTime = Date.now();
+
+                if (tx >= hero.x - 20 && tx <= hero.x + hero.w + 20 && ty >= hero.y - 20 && ty <= hero.y + hero.h + 20) {
+                    hero.isBeingDragged = true; dragOffsetX = tx - hero.x; dragOffsetY = ty - hero.y;
+                    hero.lastX = hero.x; startedOnGround = hero.isGrounded; 
+                }
+            },
+            touchMove: function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = WORLD_WIDTH / rect.width; const scaleY = WORLD_HEIGHT / rect.height;
+                let nativeEvent = e.originalEvent || e;
+                let clientX = e.clientX; let clientY = e.clientY;
+
+                if (clientX === undefined && nativeEvent.touches && nativeEvent.touches.length > 0) {
+                    clientX = nativeEvent.touches[0].clientX; clientY = nativeEvent.touches[0].clientY;
+                }
+                if (clientX === undefined) return; 
+
+                const tx = (clientX - rect.left) * scaleX; const ty = (clientY - rect.top) * scaleY;
+
+                if (scrollState !== "DONE") {
+                    if (isDraggingText) {
+                        const deltaY = ty - textDragLastY;
+                        
+                        // Trigger immediate "了解" button spawning if any scroll drag occurs
+                        if (deltaY !== 0) {
+                            hasScrolledToBottomOnce = true;
+                        }
+                        
+                        textScrollVelocityY = deltaY; 
+                        textScrollOffsetY += deltaY;
+                        textDragLastY = ty;
+
+                        if (textScrollOffsetY > 0) textScrollOffsetY = 0;
+                        if (maxTextScrollHeight > 0 && textScrollOffsetY < -maxTextScrollHeight) {
+                            textScrollOffsetY = -maxTextScrollHeight;
+                        }
+                    }
+                    return;
+                }
+
+                if (hero.isSunk || hero.isWalkingIn || hero.hasAscended || !hero.isBeingDragged) return;
+
+                hero.lastX = hero.x; hero.x = tx - dragOffsetX; hero.y = ty - dragOffsetY;
+            },
+            touchUp: function(e) {
+                if (scrollState !== "DONE") {
+                    isDraggingText = false;
+                    return;
+                }
+
+                if (hero.isSunk || hero.isWalkingIn || hero.hasAscended || !hero.isBeingDragged) return; 
+
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = WORLD_WIDTH / rect.width; const scaleY = WORLD_HEIGHT / rect.height;
+                let nativeEvent = e.originalEvent || e;
+                let clientX = e.clientX; let clientY = e.clientY;
+
+                if (clientX === undefined && nativeEvent.changedTouches && nativeEvent.changedTouches.length > 0) {
+                    clientX = nativeEvent.changedTouches[0].clientX; clientY = nativeEvent.changedTouches[0].clientY;
+                }
+
+                const endX = clientX !== undefined ? (clientX - rect.left) * scaleX : (hero.x + dragOffsetX);
+                const endY = clientY !== undefined ? (clientY - rect.top) * scaleY : (hero.y + dragOffsetY);
+                const infoX = endX - startX; const infoY = endY - startY; 
+                const duration = Math.max(Date.now() - startTime, 1); 
+                const velocityX = infoX / (duration / 10); const velocityY = infoY / (duration / 10);
+
+                if (hero.y <= 0) {
+                    hero.vy = hero.minJump - 15; hero.vx = (hero.x - hero.lastX) * 1.2; 
+                } 
+                else if (duration < 300 && Math.abs(infoY) > 50) {
+                    if (infoY < 0 && startedOnGround) {
+                        hero.vy = hero.minJump - Math.min(Math.abs(infoY) / 5, 25); hero.vx = velocityX * 1.5; 
+                        //currentMessage = "YEET!"; 
+                        messageTimer = 40;
+                    } 
+                    else if (infoY > 0) {
+                        hero.vy = Math.min(velocityY * 2, 35); hero.vx = velocityX * 1.5;
+                        //currentMessage = "SLAM!"; 
+                        messageTimer = 40;
+                    }
+                } else {
+                    hero.vx = (hero.x - hero.lastX) * 0.5; hero.vy = 0;
+                }
+                hero.isBeingDragged = false;
+            }  
+        });
+        requestAnimationFrame(render);
+    });
+    </script>  
+</body>
+</html>  
